@@ -1,3 +1,5 @@
+import sys
+
 from tqdm import tqdm
 import math
 import arxiv
@@ -23,15 +25,30 @@ def parse_result(result, column_names=column_names):
     published = result.published
     title = result.title
     authors = [subresult.name for subresult in result.authors]
+    try:
+        authors = '\t'.join(authors)
+    except:
+        pass
     summary = result.summary
     comment = result.comment
     journal_ref = result.journal_ref
     doi = result.doi
     primary_category = result.primary_category
     categories = result.categories
-    
-    return [entry_id, updated, published, title, authors, summary, comment, journal_ref, doi,
+    try:
+        categories = '\t'.join(categories)
+    except:
+        pass
+
+    rows = [entry_id, updated, published, title, authors, summary, comment, journal_ref, doi,
            primary_category, categories]
+    return rows
+    '''
+    content = {'id': entry_id, 'updated': updated, 'published': published, 'title': title, 'authors': authors,
+               'summary': summary, 'comment': comment, 'journal_ref': journal_ref, 'doi': doi,
+               'category': primary_category, 'categories': categories}
+    return content
+    '''
 
 def make_dict(column_names, rows):
     pd_dict = dict()

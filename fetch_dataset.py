@@ -23,9 +23,22 @@ def load_dataset(path='./data/nlpop_dataset.csv'):
         all_arxiv_identifiers.update(arxiv_identifiers)
     all_arxiv_identifiers_list = list(all_arxiv_identifiers)
 
+    # all_arxiv_identifiers_list = all_arxiv_identifiers_list[:1]
+
     # fetch arxiv data
     arxiv_reponse = dataset_builder.utils.fetch_arxiv_data(all_arxiv_identifiers_list)
-    rows = np.array(list(map(dataset_builder.utils.parse_result, arxiv_reponse)))
+
+    rows = []
+    for idx, row in enumerate(arxiv_reponse):
+        try:
+            np.array(dataset_builder.utils.parse_result(row))
+        except:
+            print(idx, row)
+            sys.exit(0)
+        rows.append(dataset_builder.utils.parse_result(row))
+    rows = np.asarray(rows)
+
+    #rows = np.array(list(map(dataset_builder.utils.parse_result, arxiv_reponse)))
 
     # create arxiv dataframe
     pd_dict = dataset_builder.utils.make_dict(dataset_builder.utils.column_names, rows)
@@ -177,7 +190,7 @@ if __name__ == "__main__":
     os.makedirs('./cache', exist_ok=True)
     
     df = load_dataset(path='./data/nlpop_dataset.csv')
-    df.to_csv('./cache/finat.csv', sep=',', index=False)
+    df.to_csv('./cache/final.csv', sep=',', index=False)
 
     df = load_dataset(path='./data/train.csv')
     df.to_csv('./cache/train.csv', sep=',', index=False)
