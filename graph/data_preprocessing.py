@@ -37,7 +37,7 @@ def sep_arxive_data(arxive_string):
     return arxive_string
 
 
-def text_features_to_numeric(text_array, text_type='tweets'):
+def text_features_to_numeric(text_array, text_type='tweet'):
     if text_type not in ['tweet', 'paper']:
         raise Exception(f'text_type must be either "tweet" or "paper" but was {text_type}')
     if text_type == 'tweet':

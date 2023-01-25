@@ -1,5 +1,7 @@
 import sys
+import itertools
 
+import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 from data_preprocessing import *
@@ -12,11 +14,12 @@ def create_nodes_and_edges(df, include_authors=False):
                     'user': []}
     node_dict = {'paper': [],
                  'tweet': [],
-                 'user': []}
+                 'user': [[], [], [], [], [], [], []]}
     edge_dict = {('tweet', 'cites', 'paper'): [[], []],
                  ('tweet', 'replies_to', 'tweet'): [[], []],
                  ('user', 'posts', 'tweet'): [[], []],
-                 ('tweet', 'mentions', 'user'): [[], []]}
+                 ('tweet', 'mentions', 'user'): [[], []],
+                 ('paper', 'shares_author_with', 'paper'): [[], []]}
     label_dict_likes = {'tweet': []}
     label_dict_retweets = {'tweet': []}
     if include_authors:
@@ -25,6 +28,7 @@ def create_nodes_and_edges(df, include_authors=False):
         edge_dict[('author', 'wrote', 'paper')] = [[], []]
 
     is_target_node = []
+    author_paper_dict = {}
 
     for index, row in df.iterrows():
         # print(row)
@@ -44,7 +48,7 @@ def create_nodes_and_edges(df, include_authors=False):
         user_listed_count = row['author.listed_count']
         user_description = row['author.description']
 
-        author_cell = str(row['arxiv.authors']).split('<THREAD_SEP>')
+        authors = sep_arxive_data(str(row['arxiv.authors']))
         paper_ids = list_string_to_list(row['arxiv_identifiers'])
         tweet_ids = split_tweet_ids(row['tweet_id'])
         user_id = row['author.username'].strip()
@@ -67,6 +71,7 @@ def create_nodes_and_edges(df, include_authors=False):
                     idx_tweet_node = node_id_dict['tweet'].index(tweet_id)
                     is_target_node[idx_tweet_node] = True
 
+        '''
         # adding authors
         if include_authors:
             for authors_thread_id, authors_thread in enumerate(author_cell):
@@ -84,6 +89,18 @@ def create_nodes_and_edges(df, include_authors=False):
                             node_id_dict['author'].append(author.strip())
                             # author features
                             node_dict['author'].append(1)
+        '''
+        paper_ids_flattened = list(itertools.chain.from_iterable(paper_ids))
+        for idx, val in enumerate(paper_ids_flattened):
+            try:
+                set_of_authors = authors[idx].split('\t')
+            except:
+                continue
+            for single_author in set_of_authors:
+                if single_author in list(author_paper_dict.keys()):
+                    author_paper_dict[single_author].append(val)
+                else:
+                    author_paper_dict[single_author] = [val]
 
         # adding papers
         papers_added = 0
@@ -100,8 +117,17 @@ def create_nodes_and_edges(df, include_authors=False):
         if user_id not in node_id_dict['user']:
             node_id_dict['user'].append(user_id)
             # user features
-            node_dict['user'].append(np.array([user_verified, user_following, user_followers, user_tweet_count,
-                                               user_favourites_count, user_listed_count])) # user description
+            node_dict['user'][0].append(user_verified)
+            node_dict['user'][1].append(user_following)
+            node_dict['user'][2].append(user_followers)
+            node_dict['user'][3].append(user_tweet_count)
+            node_dict['user'][4].append(user_favourites_count)
+            node_dict['user'][5].append(user_listed_count)
+            node_dict['user'][6].append(user_description)
+            # np.array([user_verified, user_following, user_followers, user_tweet_count,
+            # user_favourites_count, user_listed_count])) # user description
+
+    author_paper_dict = {key: list(set(val)) for key, val in author_paper_dict.items() if len(list(set(val))) > 1}
 
     for index, row in df.iterrows():
         # print(row)
@@ -119,6 +145,7 @@ def create_nodes_and_edges(df, include_authors=False):
         edge_dict[('user', 'posts', 'tweet')][0].append(user_node_idx)
         edge_dict[('user', 'posts', 'tweet')][1].append(original_tweet_node_idx)
 
+        '''
         # 'author', 'wrote', 'paper'
         if include_authors:
             author_cell = '<ARXIV_SEP>'.join(author_cell)
@@ -133,6 +160,7 @@ def create_nodes_and_edges(df, include_authors=False):
                         node_idx_author = node_id_dict['author'].index(author.strip())
                         edge_dict[('author', 'wrote', 'paper')][0].append(node_idx_author)
                         edge_dict[('author', 'wrote', 'paper')][1].append(node_idx_paper)
+        '''
 
         # 'tweet', 'cites', 'paper'
         # 'tweet', 'mentions', 'user'
@@ -167,6 +195,16 @@ def create_nodes_and_edges(df, include_authors=False):
                             edge_dict[('tweet', 'replies_to', 'tweet')][0].append(node_idx_tweet_from)
                             edge_dict[('tweet', 'replies_to', 'tweet')][1].append(node_idx_tweet_to)
 
+        # 'paper', 'shares_author_with', 'paper'
+        for author, paper_list in author_paper_dict.items():
+            for i in range(len(paper_list)):
+                node_idx_paper_one = node_id_dict['paper'].index(paper_list[i])
+                for k in range(i, len(paper_list)):
+                    if i != k:
+                        node_idx_paper_two = node_id_dict['paper'].index(paper_list[k])
+                        edge_dict[('paper', 'shares_author_with', 'paper')][0].append(node_idx_paper_one)
+                        edge_dict[('paper', 'shares_author_with', 'paper')][1].append(node_idx_paper_two)
+
     return node_id_dict, node_dict, edge_dict, label_dict_likes, label_dict_retweets, is_target_node
 
 
@@ -196,24 +234,34 @@ def create_heterogeneous_graph(x_dict, edge_index_dict, label_dict_likes=None, l
 
 
 if __name__ == '__main__':
-    df = read_data('final')
+    df = read_data('valid')
     print(df.shape)
     print(10 * '*')
     node_id_dict, node_dict, edge_dict, label_dict_likes, label_dict_retweets, is_target_node = create_nodes_and_edges(df, include_authors=False)
     # print(len(node_id_dict['author'])) #, np.unique(np.array(node_id_dict['author'])).shape)
     print(len(node_id_dict['tweet']), len(node_dict['tweet'])) #, np.unique(np.array(node_id_dict['tweet'])).shape)
     print(len(node_id_dict['paper']), len(node_dict['paper'])) #, np.unique(np.array(node_id_dict['paper'])).shape)
-    print(len(node_id_dict['user']), len(node_dict['user'])) #, np.unique(np.array(node_id_dict['user'])).shape)
+    print(len(node_id_dict['user'][0]), len(node_dict['user'][0])) #, np.unique(np.array(node_id_dict['user'])).shape)
     print(10*'*')
     # print(len(edge_dict[('author', 'wrote', 'paper')][0]))
     print(len(edge_dict[('tweet', 'cites', 'paper')][0]))
     print(len(edge_dict[('tweet', 'replies_to', 'tweet')][0]))
     print(len(edge_dict[('user', 'posts', 'tweet')][0]))
     print(len(edge_dict[('tweet', 'mentions', 'user')][0]))
+    print(len(edge_dict[('paper', 'shares_author_with', 'paper')][0]))
     print(10 * '*')
     print(len(label_dict_likes['tweet']))
     print(len(label_dict_retweets['tweet']))
     print(len(is_target_node), 'True:', sum(is_target_node))
+
+    # concat and transform user features
+    for idx, feature_list in enumerate(node_dict['user']):
+        if idx < len(node_dict['user'])-1:
+            scaled_features = np.array(feature_list) / (max(feature_list) if max(feature_list) > 0 else 1)
+            node_dict['user'][idx] = scaled_features[:, np.newaxis]
+        else:
+            node_dict['user'][idx] = text_features_to_numeric(feature_list)
+    node_dict['user'] = np.concatenate(node_dict['user'], axis=1)
 
     # convert text features to numeric
     node_dict['paper'] = text_features_to_numeric(node_dict['paper'], text_type='paper')
@@ -225,4 +273,4 @@ if __name__ == '__main__':
                                        label_dict_retweets=label_dict_retweets,
                                        is_target_node=is_target_node)
     print(graph)
-    save_graph(graph)
+    # save_graph(graph)
